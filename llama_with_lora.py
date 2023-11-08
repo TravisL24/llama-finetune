@@ -1,3 +1,4 @@
+import os
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
@@ -22,7 +23,7 @@ def print_trainable_parameters(model):
     )
 
 
-
+os.environ["WANDB_DISABLED"]="true"
 model_id = "/vg_data/share/models/llama2-hf-converted/llama-2-7b"
 
 bnb_config = BitsAndBytesConfig(
@@ -69,13 +70,14 @@ trainer = transformers.Trainer(
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1, # number of forward steps before running a backward step
         warmup_steps=2,
-        save_steps=100,        
-        max_steps=20,
+        save_steps=1000,        
+        max_steps=1000,
         learning_rate=2e-4,
         fp16=True,
         logging_steps=1,
         output_dir="outputs",
-        optim="paged_adamw_8bit"
+        optim="paged_adamw_8bit",
+        report_to="none" # turn wandb off
     ),
     data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
@@ -83,3 +85,7 @@ model.config.use_cache = False  # silence the warnings. Please re-enable for inf
 trainer.train()
 
 trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes")
+
+"""
+CUDA_VISIBLE_DEVICES='2' python /data/ice/lt/llama-finetune/llama_with_lora.py
+"""
