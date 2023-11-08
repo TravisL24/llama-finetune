@@ -58,7 +58,7 @@ print_trainable_parameters(model)
 data = load_dataset("Abirate/english_quotes")
 data = data.map(lambda samples: tokenizer(samples["quote"]), batched=True)
 
-# Run the cell below to run the training! For the sake of the demo, we just ran it for few steps just to showcase how to use this integration with existing tools on the HF ecosystem.
+# Run the cell below to run the training!
 
 tokenizer.pad_token = tokenizer.eos_token
 
@@ -69,7 +69,7 @@ trainer = transformers.Trainer(
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1, # number of forward steps before running a backward step
         warmup_steps=2,
-        save_steps=10,        
+        save_steps=100,        
         max_steps=20,
         learning_rate=2e-4,
         fp16=True,
@@ -82,4 +82,4 @@ trainer = transformers.Trainer(
 model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
 trainer.train()
 
-trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result")
+trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes")
