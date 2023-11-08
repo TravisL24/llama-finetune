@@ -26,15 +26,16 @@ def print_trainable_parameters(model):
 os.environ["WANDB_DISABLED"]="true"
 model_id = "/vg_data/share/models/llama2-hf-converted/llama-2-7b"
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16
-)
+# bnb_config = BitsAndBytesConfig(
+#     load_in_4bit=True,
+#     bnb_4bit_use_double_quant=True,
+#     bnb_4bit_quant_type="nf4",
+#     bnb_4bit_compute_dtype=torch.bfloat16
+# )
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map="auto")
+# model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 #  For that use the `prepare_model_for_kbit_training` method from PEFT.
 model.gradient_checkpointing_enable()
@@ -44,12 +45,12 @@ model = prepare_model_for_kbit_training(model)
 # This configuration is for llama-2, in particular the target_modules
 
 config = LoraConfig(
-r=8, # dimension of the updated matrices
-lora_alpha=32, # parameter for scaling
-target_modules=["q_proj", "up_proj", "o_proj", "k_proj", "down_proj", "gate_proj", "v_proj"],
-lora_dropout=0.1, # dropout probability for layers
-bias="none",
-task_type="CAUSAL_LM",
+    r=8, # dimension of the updated matrices
+    lora_alpha=32, # parameter for scaling
+    target_modules=["q_proj", "up_proj", "o_proj", "k_proj", "down_proj", "gate_proj", "v_proj"],
+    lora_dropout=0.1, # dropout probability for layers
+    bias="none",
+    task_type="CAUSAL_LM",
 )
 
 model = get_peft_model(model,config)
@@ -68,15 +69,15 @@ trainer = transformers.Trainer(
     train_dataset=data["train"],
     args=transformers.TrainingArguments(
         per_device_train_batch_size=1,
-        gradient_accumulation_steps=1, # number of forward steps before running a backward step
+        gradient_accumulation_steps=1,
         warmup_steps=2,
         save_steps=1000,        
-        max_steps=1000,
+        max_steps=10,
         learning_rate=2e-4,
         fp16=True,
         logging_steps=1,
         output_dir="outputs",
-        optim="paged_adamw_8bit",
+        optim="paged_adamw_8bit", # default = adamw_torch_fused
         report_to="none" # turn wandb off
     ),
     data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
@@ -84,7 +85,7 @@ trainer = transformers.Trainer(
 model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
 trainer.train()
 
-trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes")
+trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes/7b")
 
 """
 CUDA_VISIBLE_DEVICES='2' python /data/ice/lt/llama-finetune/llama_with_lora.py
