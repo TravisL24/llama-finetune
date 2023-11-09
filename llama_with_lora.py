@@ -36,7 +36,7 @@ model_id = "/vg_data/share/models/llama2-hf-converted/llama-2-7b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 # model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map="auto")
 
-# The custom quantization method is executed here！！！
+# >>> The custom quantization method is executed here！！！
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 #  For that use the `prepare_model_for_kbit_training` method from PEFT.
