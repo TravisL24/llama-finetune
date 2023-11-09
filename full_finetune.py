@@ -14,14 +14,31 @@
 
 import copy
 import logging
+import io
+import json
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence
 
 import torch
 import transformers
-import utils
 from torch.utils.data import Dataset
 from transformers import Trainer
+
+
+def _make_r_io_base(f, mode: str):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    return f
+
+
+
+def jload(f, mode="r"):
+    """Load a .json file into a dictionary."""
+    f = _make_r_io_base(f, mode)
+    jdict = json.load(f)
+    f.close()
+    return jdict
+
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -45,6 +62,7 @@ PROMPT_DICT = {
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="/vg_data/share/models/llama2-hf-converted/llama-2-7b")
+    device: Optional[str] = field(default="cuda:2")
 
 
 @dataclass
@@ -130,7 +148,7 @@ class SupervisedDataset(Dataset):
     def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        list_data_dict = utils.jload(data_path)
+        list_data_dict = jload(data_path)
 
         logging.warning("Formatting inputs...")
         prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
@@ -186,7 +204,7 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-    )
+    ).to(model_args.device)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -220,3 +238,32 @@ def train():
 
 if __name__ == "__main__":
     train()
+
+"""
+torchrun --nproc_per_node=1 full_finetune.py \
+--model_name_or_path "/vg_data/share/models/llama2-hf-converted/llama-2-7b" \
+--device "cuda:2"
+--data_path /vg_data/share/dataset/alpaca/alpaca_data.json \
+--bf16 True \
+--output_dir "/vg_data/share/models/llama2-hf-converted/fine_tuning_result/alpaca" \
+--num_train_epochs 3 \
+--per_device_train_batch_size 1 \
+--per_device_eval_batch_size 1 \
+--gradient_accumulation_steps 8 \
+--evaluation_strategy "no" \
+--save_strategy "steps" \
+--save_steps 2000 \
+--save_total_limit 1 \
+--learning_rate 2e-5 \
+--weight_decay 0. \
+--warmup_ratio 0.03 \
+--lr_scheduler_type "cosine" \
+--logging_steps 1 \
+--tf32 True
+"""
+
+"""
+多卡添加以下超参
+--fsdp "full_shard auto_wrap" \
+--fsdp_transformer_layer_cls_to_wrap 'LlamaDecoderLayer' \
+"""
