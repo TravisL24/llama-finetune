@@ -2,3 +2,5 @@
 /outputs
 
 *.log
+
+llama_finetune_custom.py

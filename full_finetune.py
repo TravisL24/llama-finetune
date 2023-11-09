@@ -242,7 +242,7 @@ if __name__ == "__main__":
 """
 torchrun --nproc_per_node=1 full_finetune.py \
 --model_name_or_path "/vg_data/share/models/llama2-hf-converted/llama-2-7b" \
---device "cuda:2"
+--device "cuda:2" \
 --data_path /vg_data/share/dataset/alpaca/alpaca_data.json \
 --bf16 True \
 --output_dir "/vg_data/share/models/llama2-hf-converted/fine_tuning_result/alpaca" \
