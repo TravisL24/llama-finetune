@@ -1,4 +1,0 @@
-demo for llama-finetune
-
-
-目前使用了全量微调(full_finetune.py)和LoRA(llama_with_lora.py),对应执行脚本可见注释。
