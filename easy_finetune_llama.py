@@ -1,12 +1,21 @@
 import os
 import time
 import torch
-import transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer
-from transformers.trainer_utils import TrainOutput, speed_metrics, find_executable_batch_size
-from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model
 from datasets import load_dataset
-
+from dataclasses import dataclass, field
+import transformers
+from transformers import ( 
+    AutoTokenizer, 
+    AutoModelForCausalLM, 
+    Trainer,
+    HfArgumentParser,
+    TrainingArguments,
+)
+from transformers.trainer_utils import (
+    TrainOutput, 
+    speed_metrics, 
+    find_executable_batch_size
+)
 
 
 
@@ -25,8 +34,15 @@ def print_trainable_parameters(model):
     )
 
 
+@dataclass
+class FinetuneArguments:
+    dataset_path : str = field(default=None)
+    save_path : str = field(default="/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes/test")
+    model_path : str = field(default="/vg_data/share/models/llama2-hf-converted/llama-2-7b")
+
+
 ###########################
-#  overwriting Trainer    #
+#  override Trainer    #
 ###########################
 class ModifiedTrianer(Trainer):
 
@@ -84,7 +100,7 @@ class ModifiedTrianer(Trainer):
                 self.num_tokens(train_dataloader, args.max_steps) * args.gradient_accumulation_steps
             )
 
-        # create_optimizer_and_scheduler. Still can overwriting
+        # create_optimizer_and_scheduler. Still can override
         self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # Activate gradient checkpointing if needed
@@ -123,12 +139,14 @@ class ModifiedTrianer(Trainer):
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        model.zero_grad()
+        self.model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         total_batched_samples = 0
+        # >>>>>>>>>>>>>>>>>>>>
         # >>> here is loop <<<
+        # <<<<<<<<<<<<<<<<<<<<
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
             if hasattr(epoch_iterator, "set_epoch"):
@@ -142,7 +160,7 @@ class ModifiedTrianer(Trainer):
                 if len_dataloader is not None
                 else args.max_steps * args.gradient_accumulation_steps
             )
-            # self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
+            self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             steps_skipped = 0
 
@@ -156,7 +174,7 @@ class ModifiedTrianer(Trainer):
                 # with self.accelerator.accumulate(model):
                 #     tr_loss_step = self.training_step(model, inputs)
 
-                tr_loss_step = self.training_step(model, inputs)
+                tr_loss_step = self.training_step(self.model, inputs)
 
                 tr_loss += tr_loss_step
 
@@ -175,11 +193,11 @@ class ModifiedTrianer(Trainer):
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         self.accelerator.clip_grad_norm_(
-                            model.parameters(),
+                            self.model.parameters(),
                             args.max_grad_norm,
                         )
 
-                    # Optimizer step
+                    # >>> Optimizer step <<<
                     self.optimizer.step()
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
@@ -187,7 +205,7 @@ class ModifiedTrianer(Trainer):
                         if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                             self.lr_scheduler.step()
 
-                    model.zero_grad()
+                    self.model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
@@ -215,6 +233,7 @@ class ModifiedTrianer(Trainer):
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
 
+        # Measure and return speed performance metrics.
         metrics = speed_metrics(
             "train",
             start_time,
@@ -236,7 +255,7 @@ class ModifiedTrianer(Trainer):
 
 
     def training_step(self, model, inputs):
-        # >>> Overwriting the training method here. One step <<<
+        # >>> Override the training method here. One step <<<
         model.train()
         inputs = self._prepare_inputs(inputs)
 
@@ -264,53 +283,48 @@ class ModifiedTrianer(Trainer):
     #     ).loss
 
 
+def main():
+    os.environ["WANDB_DISABLED"]="true"
 
-os.environ["WANDB_DISABLED"]="true"
+    ft_args, training_args = HfArgumentParser((
+        FinetuneArguments, 
+        TrainingArguments
+    )).parse_args_into_dataclasses()
 
-###########################################
-#     load dataset tokenizer and model    #
-###########################################
+    ###########################################
+    #     load dataset tokenizer and model    #
+    ###########################################
 
-model_id = "/vg_data/share/models/llama2-hf-converted/llama-2-7b"
+    model_id = ft_args.model_path
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto").half()
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto").half()
 
-data = load_dataset("Abirate/english_quotes")
-data = data.map(lambda samples: tokenizer(samples["quote"]), batched=True)
+    data = load_dataset("Abirate/english_quotes")
+    data = data.map(lambda samples: tokenizer(samples["quote"]), batched=True)
 
 
-model.gradient_checkpointing_enable()
-print_trainable_parameters(model)
+    model.gradient_checkpointing_enable()
+    print_trainable_parameters(model)
 
-####################################
-#  set up tokenizer and trainer    #
-####################################
-tokenizer.pad_token = tokenizer.eos_token
+    ####################################
+    #  set up tokenizer and trainer    #
+    ####################################
+    tokenizer.pad_token = tokenizer.eos_token
 
-trainer = ModifiedTrianer(
-    model=model,
-    train_dataset=data["train"], 
-    args=transformers.TrainingArguments(
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=1,
-        warmup_steps=2,
-        save_steps=1000,        
-        max_steps=10,
-        learning_rate=2e-4,
-        fp16=True,
-        logging_steps=1,
-        output_dir="outputs",
-        optim="paged_adamw_8bit", # default = adamw_torch_fused
-        report_to="none" # turn wandb off
-    ),
-    data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
-)
-model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
-trainer.train()
+    trainer = ModifiedTrianer(
+        model=model,
+        train_dataset=data["train"], 
+        args=training_args,
+        data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
+    )
+    model.config.use_cache = False  # silence the warnings. Please re-enable for inference!
+    trainer.train()
 
-trainer.save_model("/vg_data/share/models/llama2-hf-converted/fine_tuning_result/english_quotes/test")
+    trainer.save_model(output_dir=ft_args.save_path)
 
+if __name__ == "__main__":
+    main()
 """
-CUDA_VISIBLE_DEVICES='1' python /data/ice/lt/llama-finetune/easy_finetune_llama.py
+bash data/ice/lt/llama-finetune/scripts/easy_fine_llama.sh
 """
