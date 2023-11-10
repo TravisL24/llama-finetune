@@ -1,4 +1,3 @@
-CUDA_VISIBLE_DEVICES=1 \
 python3 /data/ice/lt/llama-finetune/full_finetune.py \
 --model_name_or_path "/vg_data/share/models/llama2-hf-converted/llama-2-7b" \
 --device "cuda:1" \

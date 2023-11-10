@@ -3,7 +3,7 @@
 ## 当前状态
 full_finetune.py提供了Trainer的重写，并且在alpaca数据集上进行了指令微调(PEQA论文的实验设计)
 ### 存在问题
-device有bug，只能进入cuda：0
+full_finetune目前会OOM，在思考优化
 
 ## 基本信息
 目前使用了全量微调(full_finetune.py)和LoRA(llama_with_lora.py),对应执行脚本可见注释。

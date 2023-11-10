@@ -29,7 +29,7 @@ from transformers.trainer_utils import (
     speed_metrics, 
     find_executable_batch_size
 )
-
+# os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 def _make_r_io_base(f, mode: str):
     if not isinstance(f, io.IOBase):
@@ -68,7 +68,7 @@ PROMPT_DICT = {
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="/vg_data/share/models/llama2-hf-converted/llama-2-7b")
-    device: Optional[str] = field(default="cuda:2")
+    device: Optional[str] = field(default="cuda:1")
 
 
 @dataclass
@@ -444,9 +444,10 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
 
 
 def train():
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
@@ -477,8 +478,8 @@ def train():
     )
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    # trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    trainer = ModifiedTrianer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    # trainer = ModifiedTrianer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
     trainer.train()
     trainer.save_state()
     trainer.save_model(output_dir=training_args.output_dir)
