@@ -1,9 +1,14 @@
 # demo for llama-finetune
 
+## 当前状态
+easy_finetune_llama.py提供了Trainer的重写。
+### 存在问题
+现在还在用小的数据集做调试，trainer中部分方法还需要调整
 
+## 基本信息
 目前使用了全量微调(full_finetune.py)和LoRA(llama_with_lora.py),对应执行脚本可见注释。
 
-inference.py用于进行lora微调后的模型推理，全量微调还在尝试使用deepspeed解决OOM问题。
+inference.py用于进行lora微调后的模型推理.
 
 ## 数据集使用
 
